@@ -158,6 +158,55 @@ func TestLateKeyAfterUnfinishedSequence(t *testing.T) {
 	t.Error("the late key was dropped")
 }
 
+// A resize can move fzf to different rows, so the saved offset has to be
+// re-queried before mouse clicks are mapped to list rows again.
+func TestRefreshOffsetOnResize(t *testing.T) {
+	inR, inW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { inR.Close(); inW.Close(); outW.Close(); outR.Close() })
+
+	// The resize moves fzf two rows down. A live terminal answers the new
+	// query on its own, so the reply is written once the query is out.
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		inW.WriteString("\x1b[7;10R")
+	}()
+
+	r := &LightRenderer{ttyin: inR, ttyout: outW, escDelay: defaultEscDelay, mouse: true, yoffset: 4}
+	r.Resize(func(h int) int { return h })
+
+	if r.yoffset != 6 {
+		t.Errorf("yoffset %d after resize, want the new 6", r.yoffset)
+	}
+}
+
+// When the terminal does not answer the query, the old offset has to stay in
+// place rather than being replaced by an invalid one.
+func TestRefreshOffsetKeepsOldValueWithoutReply(t *testing.T) {
+	inR, inW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { inR.Close(); inW.Close(); outW.Close(); outR.Close() })
+
+	r := &LightRenderer{ttyin: inR, ttyout: outW, escDelay: defaultEscDelay, mouse: true, yoffset: 4}
+	r.Resize(func(h int) int { return h })
+
+	if r.yoffset != 4 {
+		t.Errorf("yoffset %d without a reply, want the old 4", r.yoffset)
+	}
+}
+
 // A read error during the second-chance read must end fzf cleanly, not panic.
 func TestSecondChanceReadError(t *testing.T) {
 	inR, inW, err := os.Pipe()

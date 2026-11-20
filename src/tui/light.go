@@ -309,6 +309,14 @@ func (r *LightRenderer) Init() error {
 
 func (r *LightRenderer) Resize(maxHeightFunc func(int) int) {
 	r.maxHeightFunc = maxHeightFunc
+	// A resize may have moved fzf to other rows, and mouse reports are
+	// mapped to list rows through yoffset. Ask again, and keep the old
+	// offset if the terminal does not answer.
+	if !r.fullscreen && r.mouse {
+		if y, _ := r.findOffset(); y >= 0 {
+			r.yoffset = y
+		}
+	}
 }
 
 func (r *LightRenderer) makeSpace() {
